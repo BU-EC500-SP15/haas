@@ -220,12 +220,18 @@ def headnode_stop(headnode):
     do_post(url)
 
 @cmd
-def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
-    """Register a node named <node>, with the given ipmi host/user/password"""
-    url = object_url('node', node)
-    do_put(url, data={'ipmi_host': ipmi_host,
-                      'ipmi_user': ipmi_user,
-                      'ipmi_pass': ipmi_pass})
+def node_register(node, ipmi_host, ipmi_user, ipmi_pass, obm_type="ipmi"):
+    """Register a node named <node>, with the given ipmi host/user/password
+       OR specify an optional fifth argument
+       Right now if this argument is anything but 'ipmi' you just get a message
+    """
+    if obm_type=="ipmi":
+        url = object_url('node', node)
+        do_put(url, data={'ipmi_host': ipmi_host,
+                          'ipmi_user': ipmi_user,
+                          'ipmi_pass': ipmi_pass})
+    else:
+	print 'Type specified was "{0}"' .format(obm_type)
 
 @cmd
 def node_delete(node):
