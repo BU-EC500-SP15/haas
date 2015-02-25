@@ -131,6 +131,7 @@ class Node(Model):
     ipmi_user = Column(String, nullable=False)
     ipmi_pass = Column(String, nullable=False)
 
+    #def __init__(self, label, ipmi_host, ipmi_user, ipmi_pass, rHaaS="False"): #added rHaaS="False"
     def __init__(self, label, ipmi_host, ipmi_user, ipmi_pass):
         """Register the given node.
 
@@ -143,6 +144,7 @@ class Node(Model):
         self.ipmi_host = ipmi_host
         self.ipmi_user = ipmi_user
         self.ipmi_pass = ipmi_pass
+        #self.rHaaS = rHaaS #added this
 
     def _ipmitool(self, args):
         """Invoke ipmitool with the right host/pass etc. for this node.

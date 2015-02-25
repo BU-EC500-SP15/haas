@@ -21,6 +21,7 @@ import sys
 import urllib
 import requests
 import json
+import pprint
 
 from functools import wraps
 
@@ -61,7 +62,8 @@ def check_status_code(response):
         sys.stderr.write('Response text:\n')
         sys.stderr.write(response.text + "\n")
     else:
-        sys.stdout.write(response.text + "\n")
+        #sys.stdout.write(response.text + "\n")
+        return response.text
 
 # TODO: This function's name is no longer very accurate.  As soon as it is
 # safe, we should change it to something more generic.
@@ -78,7 +80,10 @@ def do_post(url, data={}):
     return check_status_code(requests.post(url, data=json.dumps(data)))
 
 def do_get(url):
-    return check_status_code(requests.get(url))
+    r = check_status_code(requests.get(url))
+    #print(r)
+    return r
+    #return check_status_code(requests.get(url))
 
 def do_delete(url):
     return check_status_code(requests.delete(url))
@@ -220,13 +225,18 @@ def headnode_stop(headnode):
     do_post(url)
 
 @cmd
-def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
+def node_register(node, ipmi_host, ipmi_user, ipmi_pass, rHaaS="False"):
     """Register a node named <node>, with the given ipmi host/user/password"""
-    url = object_url('node', node)
-    do_put(url, data={'ipmi_host': ipmi_host,
-                      'ipmi_user': ipmi_user,
-                      'ipmi_pass': ipmi_pass})
-
+    
+    if rHaaS == "False":
+        url = object_url('node', node)
+        do_put(url, data={'ipmi_host': ipmi_host,
+                          'ipmi_user': ipmi_user,
+                          'ipmi_pass': ipmi_pass,
+                          'rHaaS': 'False'})
+    else:
+        print("something")
+        
 @cmd
 def node_delete(node):
     """Delete <node>"""
@@ -393,4 +403,3 @@ def main():
         help()
     else:
         command_dict[sys.argv[1]](*sys.argv[2:])
-
