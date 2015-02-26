@@ -218,21 +218,16 @@ def project_remove_user(project, user):
 
 
 @rest_call('PUT', '/node/<node>')
-def node_register(node, ipmi_host, ipmi_user, ipmi_pass, rHaaS="False"):
+def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
     """Create node.
 
     If the node already exists, a DuplicateError will be raised.
     """
-    if rHaaS == "False":
-        db = model.Session()
-        _assert_absent(db, model.Node, node)
-        node = model.Node(node, ipmi_host, ipmi_user, ipmi_pass)
-        db.add(node)
-        db.commit()
-    elif rHaaS == "True":
-        print("HaaS")
-    else:
-        raise NoFoundError("Not Found")
+    db = model.Session()
+    _assert_absent(db, model.Node, node)
+    node = model.Node(node, ipmi_host, ipmi_user, ipmi_pass)
+    db.add(node)
+    db.commit()
 
 
 @rest_call('POST', '/node/<node>/power_cycle')
