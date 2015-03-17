@@ -223,6 +223,7 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
 
     If the node already exists, a DuplicateError will be raised.
     """
+    
     db = model.Session()
     _assert_absent(db, model.Node, node)
     node = model.Node(node, ipmi_host, ipmi_user, ipmi_pass)

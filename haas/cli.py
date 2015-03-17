@@ -224,8 +224,8 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
     """Register a node named <node>, with the given ipmi host/user/password"""
     url = object_url('node', node)
     do_put(url, data={'ipmi_host': ipmi_host,
-                      'ipmi_user': ipmi_user,
-                      'ipmi_pass': ipmi_pass})
+                          'ipmi_user': ipmi_user,
+                          'ipmi_pass': ipmi_pass})
 
 @cmd
 def node_delete(node):
