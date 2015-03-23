@@ -19,10 +19,12 @@ TODO: Spec out and document what sanitization is required.
 import importlib
 import json
 import logging
+import os
 
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
+from subprocess import call, check_output, Popen
 
 
 class NotFoundError(APIError):
@@ -223,7 +225,8 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
 
     If the node already exists, a DuplicateError will be raised.
     """
-    db = model.Session()
+
+    db = model.Session() #start talking to the database
     _assert_absent(db, model.Node, node)
     node = model.Node(node, ipmi_host, ipmi_user, ipmi_pass)
     db.add(node)
@@ -232,10 +235,18 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
 
 @rest_call('POST', '/node/<node>/power_cycle')
 def node_power_cycle(node):
-    db = model.Session()
-    node = _must_find(db, model.Node, node)
-    if not node.power_cycle():
-        raise ServerError('Could not power cycle node %s' % node.label)
+    isHaas = cfg.get('rHaas', 'isTrue')
+    if isHaas == "Yes":
+        #raise ServerError('Good job!  Sticker?')
+        db = model.Session()
+        node = _must_find(db, model.Node, node)
+        if not node.power_cycle():
+            raise ServerError('Could not power cycle node %s' % node.label)
+    else:
+        db = model.Session()
+        node = _must_find(db, model.Node, node)
+        if not node.power_cycle():
+            raise ServerError('Could not power cycle node %s' % node.label)
 
 
 @rest_call('DELETE', '/node/<node>')
@@ -332,7 +343,7 @@ def node_detach_network(node, nic):
                             # Head Node Code #
                             ##################
 
-
+import cli
 @rest_call('PUT', '/headnode/<headnode>')
 def headnode_create(headnode, project, base_img):
     """Create headnode.
@@ -345,20 +356,28 @@ def headnode_create(headnode, project, base_img):
     If the project does not exist, a NotFoundError will be raised.
 
     """
+    
+    if not cfg.getboolean('recursive', 'rHaaS'):
 
-    valid_imgs = cfg.get('headnode', 'base_imgs')
-    valid_imgs = [img.strip() for img in valid_imgs.split(',')]
+        valid_imgs = cfg.get('headnode', 'base_imgs')
+        valid_imgs = [img.strip() for img in valid_imgs.split(',')]
 
-    if base_img not in valid_imgs:
-        raise BadArgumentError('Provided image is not a valid image.')
+        if base_img not in valid_imgs:
+            raise BadArgumentError('Provided image is not a valid image.')
+    
     db = model.Session()
 
     _assert_absent(db, model.Headnode, headnode)
-    project = _must_find(db, model.Project, project)
+    project_db = _must_find(db, model.Project, project)
 
-    headnode = model.Headnode(project, headnode, base_img)
+    headnode_db = model.Headnode(project_db, headnode, base_img)
 
-    db.add(headnode)
+    db.add(headnode_db)
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_create(headnode + project, b_project, base_img)
+    
     db.commit()
 
 
