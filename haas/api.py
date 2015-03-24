@@ -437,14 +437,19 @@ def headnode_create_hnic(headnode, hnic):
     be raised.
     """
     db = model.Session()
-    headnode = _must_find(db, model.Headnode, headnode)
-    _assert_absent_n(db, headnode, model.Hnic, hnic)
+    headnode_db = _must_find(db, model.Headnode, headnode)
+    _assert_absent_n(db, headnode_db, model.Hnic, hnic)
 
-    if not headnode.dirty:
-        raise IllegalStateError
+    if not headnode_db.dirty:
+        raise IllegalStateEr
 
-    hnic = model.Hnic(headnode, hnic)
-    db.add(hnic)
+    hnic_db = model.Hnic(headnode_db, hnic)
+    db.add(hnic_db)
+
+    if cfg.getboolean('recursive','rHaaS'):
+        project = headnode_db.project.label
+        cli.headnode_create_hnic(headnode+project, hnic+project)
+        
     db.commit()
 
 
@@ -455,15 +460,18 @@ def headnode_delete_hnic(headnode, hnic):
     If the hnic does not exist, a NotFoundError will be raised.
     """
     db = model.Session()
-    headnode = _must_find(db, model.Headnode, headnode)
-    hnic = _must_find_n(db, headnode, model.Hnic, hnic)
+    headnode_db = _must_find(db, model.Headnode, headnode)
+    hnic_db = _must_find_n(db, headnode_db, model.Hnic, hnic)
 
-    if not headnode.dirty:
+    if not headnode_db.dirty:
         raise IllegalStateError
-    if not hnic:
-        raise NotFoundError("Hnic: " + hnic.label)
+    if not hnic_db:
+        raise NotFoundError("Hnic: " + hnic_db.label)
 
-    db.delete(hnic)
+    db.delete(hnic_db)
+    if cfg.get('recursive','rHaaS'):
+        project = headnode_db.project.label
+        cli.headnode_delete_hnic(headnode+project,hnic+project)
     db.commit()
 
 
