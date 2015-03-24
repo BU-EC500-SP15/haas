@@ -24,7 +24,6 @@ import os
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
-from subprocess import call, check_output, Popen
 
 
 class NotFoundError(APIError):
@@ -376,7 +375,7 @@ def headnode_create(headnode, project, base_img):
 
     if cfg.getboolean('recursive', 'rHaaS'):
         b_project = cfg.get('recursive', 'project')
-        cli.headnode_create(headnode + project, b_project, base_img)
+        cli.headnode_create(headnode + project, b_project, base_img) #img is known.  Shouldn't be in config file
     
     db.commit()
 
@@ -388,12 +387,18 @@ def headnode_delete(headnode):
     If the node does not exist, a NotFoundError will be raised.
     """
     db = model.Session()
-    headnode = _must_find(db, model.Headnode, headnode)
-    if not headnode.dirty:
-        headnode.delete()
-    for hnic in headnode.hnics:
+    headnode_db = _must_find(db, model.Headnode, headnode)
+    if not headnode_db.dirty:
+        headnode_db.delete()
+    for hnic in headnode_db.hnics:
         db.delete(hnic)
-    db.delete(headnode)
+    db.delete(headnode_db)
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        project = headnode_db.project.label #why does this work???
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_delete(headnode + project)
+
     db.commit()
 
 
@@ -407,10 +412,16 @@ def headnode_start(headnode):
     an IllegalStateException), with the exception of headnode_stop.
     """
     db = model.Session()
-    headnode = _must_find(db, model.Headnode, headnode)
-    if headnode.dirty:
-        headnode.create()
-    headnode.start()
+    headnode_db = _must_find(db, model.Headnode, headnode)
+    if headnode_db.dirty:
+        headnode_db.create()
+    headnode_db.start()
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        project = headnode_db.project.label #why does this work???
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_start(headnode + project)
+
     db.commit()
 
 
@@ -423,8 +434,13 @@ def headnode_stop(headnode):
     headnode_start will be the only valid API call after the VM is powered off.
     """
     db = model.Session()
-    headnode = _must_find(db, model.Headnode, headnode)
-    headnode.stop()
+    headnode_db = _must_find(db, model.Headnode, headnode)
+    headnode_db.stop()
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        project = headnode_db.project.label #why does this work???
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_stop(headnode + project)
 
 
 @rest_call('PUT', '/headnode/<headnode>/hnic/<hnic>')
