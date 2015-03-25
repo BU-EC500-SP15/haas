@@ -375,7 +375,7 @@ def headnode_create(headnode, project, base_img):
 
     if cfg.getboolean('recursive', 'rHaaS'):
         b_project = cfg.get('recursive', 'project')
-        cli.headnode_create(headnode + project, b_project, base_img) #img is known.  Shouldn't be in config file
+        cli.headnode_create(headnode + project, b_project, base_img) 
     
     db.commit()
 
@@ -395,7 +395,7 @@ def headnode_delete(headnode):
     db.delete(headnode_db)
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode_db.project.label #why does this work???
+        project = headnode_db.project.label 
         b_project = cfg.get('recursive', 'project')
         cli.headnode_delete(headnode + project)
 
@@ -793,12 +793,42 @@ def show_headnode(nodename):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
-    return json.dumps({
-        'name': headnode.label,
-        'project': headnode.project.label,
-        'hnics': [n.label for n in headnode.hnics],
-        'vncport': headnode.get_vncport(),
-    })
+
+    from cStringIO import StringIO
+    import sys
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaas_stdout = sys.stdout
+        sys.stdout = mystdout = StringIO()
+
+        #make call to base haas
+        b_project = headnode.project.label
+        cli.show_headnode(nodename + b_project) 
+        
+        sys.stdout = bHaas_stdout
+        bHaaS_output = mystdout.getvalue()
+        mystdout.close()
+        
+        temp_dic = json.loads(bHaaS_output.replace("'", "\""))
+
+        vncport = temp_dic['vncport']
+
+        #print(headnode_bHaaS['vncport'])
+        print('*******Hello********')
+        #print(headnode_bHaaS)
+        return json.dumps({
+            'name': headnode.label,
+            'project': headnode.project.label,
+            'hnics': [n.label for n in headnode.hnics],
+            'vncport': vncport,
+        })
+    else:
+        return json.dumps({
+            'name': headnode.label,
+            'project': headnode.project.label,
+            'hnics': [n.label for n in headnode.hnics],
+            'vncport': headnode.get_vncport(),
+        })
 
 
 @rest_call('GET', '/headnode_images/')
