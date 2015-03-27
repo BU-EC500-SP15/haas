@@ -171,6 +171,12 @@ def project_remove_user(project, user):
     do_post(url, data={'user': user})
 
 @cmd
+def project_list():
+    """List all projects"""
+    url = object_url('project')
+    do_get(url)
+
+@cmd
 def project_create(project):
     """Create a <project>"""
     url = object_url('project', project)

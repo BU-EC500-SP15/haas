@@ -103,6 +103,18 @@ def user_delete(user):
                             # Project Code #
                             ################
 
+@rest_call('GET', '/project')
+def project_list():
+    """List all existing projects.
+
+    Returns a JSON array of strings representing a list of projects.
+
+    Example: '["project1", "project2", "project3"]'
+    """
+    db = model.Session()
+    project = db.query(model.Project).all()
+    project = [p.label for p in project]
+    return json.dumps(project)
 
 @rest_call('PUT', '/project/<project>')
 def project_create(project):
