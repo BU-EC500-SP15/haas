@@ -368,15 +368,15 @@ def headnode_create(headnode, project, base_img):
     db = model.Session()
 
     _assert_absent(db, model.Headnode, headnode)
-    project_db = _must_find(db, model.Project, project)
+    project = _must_find(db, model.Project, project)
 
-    headnode_db = model.Headnode(project_db, headnode, base_img)
+    headnode = model.Headnode(project, headnode, base_img)
 
-    db.add(headnode_db)
+    db.add(headnode)
 
     if cfg.getboolean('recursive', 'rHaaS'):
         b_project = cfg.get('recursive', 'project')
-        cli.headnode_create(headnode + project, b_project, base_img)
+        cli.headnode_create(headnode.label + '_' + project.label, b_project, base_img)
     
     db.commit()
 
@@ -437,18 +437,18 @@ def headnode_create_hnic(headnode, hnic):
     be raised.
     """
     db = model.Session()
-    headnode_db = _must_find(db, model.Headnode, headnode)
-    _assert_absent_n(db, headnode_db, model.Hnic, hnic)
+    headnode = _must_find(db, model.Headnode, headnode)
+    _assert_absent_n(db, headnode, model.Hnic, hnic)
 
-    if not headnode_db.dirty:
+    if not headnode.dirty:
         raise IllegalStateEr
 
-    hnic_db = model.Hnic(headnode_db, hnic)
-    db.add(hnic_db)
+    hnic = model.Hnic(headnode, hnic)
+    db.add(hnic)
 
     if cfg.getboolean('recursive','rHaaS'):
-        project = headnode_db.project.label
-        cli.headnode_create_hnic(headnode+project, hnic+project)
+        project = headnode.project.label
+        cli.headnode_create_hnic(headnode.label + '_' + project, hnic.label + '_' + project)
         
     db.commit()
 
@@ -460,18 +460,18 @@ def headnode_delete_hnic(headnode, hnic):
     If the hnic does not exist, a NotFoundError will be raised.
     """
     db = model.Session()
-    headnode_db = _must_find(db, model.Headnode, headnode)
-    hnic_db = _must_find_n(db, headnode_db, model.Hnic, hnic)
+    headnode = _must_find(db, model.Headnode, headnode)
+    hnic = _must_find_n(db, headnode, model.Hnic, hnic)
 
-    if not headnode_db.dirty:
+    if not headnode.dirty:
         raise IllegalStateError
-    if not hnic_db:
-        raise NotFoundError("Hnic: " + hnic_db.label)
+    if not hnic:
+        raise NotFoundError("Hnic: " + hnic.label)
 
-    db.delete(hnic_db)
+    db.delete(hnic)
     if cfg.get('recursive','rHaaS'):
-        project = headnode_db.project.label
-        cli.headnode_delete_hnic(headnode+project,hnic+project)
+        project = headnode.project.label
+        cli.headnode_delete_hnic(headnode.label + '_' + project, hnic.label + '_' + project)
     db.commit()
 
 
@@ -507,12 +507,16 @@ def headnode_connect_network(headnode, hnic, network):
         raise ProjectMismatchError("Project does not have access to given network.")
 
     hnic.network = network
+    
+    if cfg.getboolean('recursive','rHaaS'):
+        cli.headnode_connect_network(headnode.label + '_' + project.label, hnic.label + '_' + project.label, network.label +'_' + project.label)
+       
     db.commit()
 
 
 @rest_call('POST', '/headnode/<headnode>/hnic/<hnic>/detach_network')
 def headnode_detach_network(headnode, hnic):
-    """Detach a heanode's nic from any network it's on.
+    """Detach a headnode's nic from any network it's on.
 
     Raises IllegalStateError if the headnode has already been started.
     """
@@ -525,6 +529,10 @@ def headnode_detach_network(headnode, hnic):
         raise IllegalStateError
 
     hnic.network = None
+    
+    if cfg.getboolean('recursive','rHaas'):
+        project = headnode.project.label
+        cli.headnode_detach_network(headnode.label+'_'+project, hnic.label+'_'+project) 
     db.commit()
 
                             # Network Code #
