@@ -284,7 +284,7 @@ def headnode_connect_network(headnode, nic, network):
 @cmd
 def headnode_detach_network(headnode, nic):
     """Detach <headnode> from the network on given <nic>"""
-    url = object_url('headnode', headnode, 'hnic', hnic, 'detach_network')
+    url = object_url('headnode', headnode, 'hnic', nic, 'detach_network')
     do_post(url)
 
 @cmd
