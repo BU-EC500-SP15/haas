@@ -318,6 +318,20 @@ def list_free_nodes():
     do_get(url)
 
 @cmd
+def list_projects():
+    """
+    """
+    url = object_url('project')
+    do_get(url)
+
+@cmd
+def list_project_headnodes(project):
+    """
+    """
+    url = object_url('project', project, 'nodes')
+    do_get(url)
+
+@cmd
 def list_project_nodes(project):
     """List all nodes attached to a <project>"""
     url = object_url('project', project, 'nodes')

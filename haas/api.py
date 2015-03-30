@@ -709,6 +709,32 @@ def list_free_nodes():
     nodes = [n.label for n in nodes]
     return json.dumps(nodes)
 
+@rest_call('GET', '/project')
+def list_projects():
+    """ List all projects in HaaS.
+    
+    Returns a JSON array of strings representing a list of projects.
+
+    Example: '["proj01", "proj02", "proj03"]
+    """    
+    db = model.Session()
+    projects = db.query(model.Project.label).all()
+    projects = [project[0] for project in projects] 
+    return json.dumps(projects)
+
+@rest_call('GET', '/project/<project>/nodes')
+def list_project_headnodes(project):
+    """ List all headnodes belonging the given project.
+
+    Returns a JSON array of strings representing a list of nodes.
+
+    Example:  '["node1", "node2", "node3"]'
+    """    
+    db = model.Session()
+    project = _must_find(db, model.Project, project)
+    headnodes = project.headnode
+    headnodes = [n.label for n in headnodes]
+    return json.dumps(headnodes)
 
 @rest_call('GET', '/project/<project>/nodes')
 def list_project_nodes(project):
