@@ -328,7 +328,7 @@ def list_projects():
 def list_project_headnodes(project):
     """
     """
-    url = object_url('project', project, 'nodes')
+    url = object_url('project', project, 'headnodes')
     do_get(url)
 
 @cmd

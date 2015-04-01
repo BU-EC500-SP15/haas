@@ -418,7 +418,7 @@ def headnode_start(headnode):
     headnode_db.start()
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode_db.project.label #why does this work???
+        project = headnode_db.project.label 
         b_project = cfg.get('recursive', 'project')
         cli.headnode_start(headnode + project)
 
@@ -722,7 +722,7 @@ def list_projects():
     projects = [project[0] for project in projects] 
     return json.dumps(projects)
 
-@rest_call('GET', '/project/<project>/nodes')
+@rest_call('GET', '/project/<project>/headnodes')
 def list_project_headnodes(project):
     """ List all headnodes belonging the given project.
 

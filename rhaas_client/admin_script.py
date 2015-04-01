@@ -1,56 +1,41 @@
 from __future__ import print_function
 
 import sys
-
-from subprocess import check_call, call
+import fileinput
+from haas import cli
+from cStringIO import StringIO
+from subprocess import check_call, call, check_output
 
 DELETE = sys.argv[0]
 
-for arg in sys.argv:
-    print(arg)
-
-N_NODES=2
 ipmiUser = "ADMIN_USER"
 ipmiPass = "ADMIN_PASSWORD"
 
-def haas(*args):
-    #args = map(str, args)
-    print (args)
-    #check_call(['haas'] + args)
-    #call(cmd)
-    args = map(str, args)
-    check_call(args)
+BHAAS_ENDPOINT = 'http://127.0.0.1:5000'
+RHAAS_ENDPOINT = 'http://127.0.0.1:5001'
 
+
+def haas(*args):
+    #print (args)
+    args = map(str, args)
+    return check_output(['haas'] + args)
+
+def changeEndpoint(new_endpoint, old_endpoint):
+    '''
+    This function is not very stable.  Should be replaced by environmental variable
+    '''
+    for line in fileinput.input("haas.cfg", inplace=True):
+        print(line.replace(old_endpoint, new_endpoint), end='')
 
 def main():
-    if DELETE == False:
-        for n in range(N_NODES):
-            node = n
-            ipmiIP = "10.0.0.0" + str(node+1)
-            nic1_port = "R10SW1::GI1/0/%d" % (n)
-            nic1 = 'nic1'
-            haas('node_register', node, ipmiIP, ipmiUser, ipmiPass)
-            haas('node_register_nic', node, nic1, 'FillThisInLater')
-            haas('port_register', nic1_port)
-            haas('port_connect_nic', nic1_port, node, nic1)
 
-    if DELETE == True:
-        for n in range(N_NODES):
-            node = n
-            ipmiIP = "10.0.0.0" + str(node+1)
-            nic1_port = "R10SW1::GI1/0/%d" % (n)
-            nic1 = 'nic1'
-            haas('port_detach_nic', nic1_port)
-            haas('port_delete', nic1_port)
-            haas('node_delete_nic', node, nic1)
-            haas('node_delete', node)
-    
-    '''
-    while True:
-        #print('$: ', end='')
-        line = sys.stdin.readline().strip()
-        print(line)
-        haas(line)
-    '''
+    changeEndpoint(BHAAS_ENDPOINT, RHAAS_ENDPOINT)
+
+    bHaaS_output = haas('list_project_nodes', 'Test')
+
+    print("************")
+    print(bHaaS_output)
+
+    changeEndpoint(RHAAS_ENDPOINT, BHAAS_ENDPOINT)
 
 main()
