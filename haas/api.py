@@ -441,7 +441,7 @@ def headnode_create_hnic(headnode, hnic):
     _assert_absent_n(db, headnode, model.Hnic, hnic)
 
     if not headnode.dirty:
-        raise IllegalStateEr
+        raise IllegalStateError
 
     hnic = model.Hnic(headnode, hnic)
     db.add(hnic)
