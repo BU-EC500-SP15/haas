@@ -19,13 +19,14 @@ TODO: Spec out and document what sanitization is required.
 import importlib
 import json
 import logging
-import os
+#import os
+#import string
 
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
-from subprocess import call, check_output, Popen
-
+from subprocess import check_output, STDOUT
+from string import find
 
 class NotFoundError(APIError):
     """An exception indicating that a given resource does not exist."""
@@ -75,6 +76,20 @@ class ServerError(APIError):
     The semantics are much the same as the corresponding HTTP error.
     """
     status_code = 500
+
+def error_lookup(err_str, msg):
+    error_dict = { 
+        'NotFoundError'     : NotFoundError(msg),
+        'DuplicateError'    : DuplicateError(msg),
+        'AllocationError'   : AllocationError(msg),
+        'BadArgumentError'  : BadArgumentError(msg),
+        'ProjectMismatchError': ProjectMismatchError(msg),
+        'BlockedError'      : BlockedError(msg),
+        'IllegalStateError' : IllegalStateError(msg),
+        'ServerError'       : ServerError(msg)
+    }
+    return error_dict[err_str];
+
 
 
 @rest_call('PUT', '/user/<user>')
@@ -356,30 +371,50 @@ def headnode_create(headnode, project, base_img):
     If the project does not exist, a NotFoundError will be raised.
 
     """
-    
-    if not cfg.getboolean('recursive', 'rHaaS'):
 
+    
+    #first check locally to see if the headnode already exists
+
+    db = model.Session()
+
+    _assert_absent(db, model.Headnode, headnode)
+    
+    #check for recursive HaaS instance, pass down to base HaaS and check for success/failure
+    if cfg.getboolean('recursive', 'rHaaS'):
+        print "HELLO!"
+        b_project = cfg.get('recursive', 'project')
+        bHaaS_out = check_output(['haas','headnode_create', headnode+'_'+project, b_project, base_img],stderr=STDOUT, shell=False)
+        print "********START*************"
+       
+        #parse the string to look for an error
+        pos = find(bHaaS_out, "Unexpected status code") 
+        
+        # pos will be -1 if base HaaS didn't throw errors
+        if (pos < 0):
+            print "Success!"
+            # update the local database
+            project = _must_find(db, model.Project, project)
+            headnode = model.Headnode(project, headnode, base_img)
+            db.add(headnode)
+            db.commit()
+        else:
+            print "ERROR!"
+            print "***"
+            pos2 = find(bHaaS_out, "{")
+            parsed = json.loads(bHaaS_out[pos2:])
+            raise error_lookup(parsed['type'], 'bHaaS Error: ' + parsed['msg'])
+       
+        
+        print "*****END********"
+
+    #else if not recursive, do anything that should only happen @ bHaaS
+    else:          
         valid_imgs = cfg.get('headnode', 'base_imgs')
         valid_imgs = [img.strip() for img in valid_imgs.split(',')]
 
         if base_img not in valid_imgs:
             raise BadArgumentError('Provided image is not a valid image.')
     
-    db = model.Session()
-
-    _assert_absent(db, model.Headnode, headnode)
-    project = _must_find(db, model.Project, project)
-
-    headnode = model.Headnode(project, headnode, base_img)
-
-    db.add(headnode)
-
-    if cfg.getboolean('recursive', 'rHaaS'):
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_create(headnode.label + '_' + project.label, b_project, base_img)
-    
-    db.commit()
-
 
 @rest_call('DELETE', '/headnode/<headnode>')
 def headnode_delete(headnode):
