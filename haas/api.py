@@ -19,15 +19,12 @@ TODO: Spec out and document what sanitization is required.
 import importlib
 import json
 import logging
-#import os
-#import string
 
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
 from subprocess import check_output, STDOUT
 from string import find
-
 class NotFoundError(APIError):
     """An exception indicating that a given resource does not exist."""
     status_code = 404 # Not Found
@@ -429,6 +426,12 @@ def headnode_delete(headnode):
     for hnic in headnode.hnics:
         db.delete(hnic)
     db.delete(headnode)
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        project = headnode.project.label 
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_delete(headnode.label + project)
+
     db.commit()
 
 
@@ -446,6 +449,12 @@ def headnode_start(headnode):
     if headnode.dirty:
         headnode.create()
     headnode.start()
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        project = headnode.project.label 
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_start(headnode.label + project)
+
     db.commit()
 
 
@@ -460,6 +469,11 @@ def headnode_stop(headnode):
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
     headnode.stop()
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        project = headnode.project.label #why does this work???
+        b_project = cfg.get('recursive', 'project')
+        cli.headnode_stop(headnode.label + project)
 
 
 @rest_call('PUT', '/headnode/<headnode>/hnic/<hnic>')
@@ -744,6 +758,32 @@ def list_free_nodes():
     nodes = [n.label for n in nodes]
     return json.dumps(nodes)
 
+@rest_call('GET', '/project')
+def list_projects():
+    """ List all projects in HaaS.
+    
+    Returns a JSON array of strings representing a list of projects.
+
+    Example: '["proj01", "proj02", "proj03"]
+    """    
+    db = model.Session()
+    projects = db.query(model.Project.label).all()
+    projects = [project[0] for project in projects] 
+    return json.dumps(projects)
+
+@rest_call('GET', '/project/<project>/headnodes')
+def list_project_headnodes(project):
+    """ List all headnodes belonging the given project.
+
+    Returns a JSON array of strings representing a list of nodes.
+
+    Example:  '["node1", "node2", "node3"]'
+    """    
+    db = model.Session()
+    project = _must_find(db, model.Project, project)
+    headnodes = project.headnode
+    headnodes = [n.label for n in headnodes]
+    return json.dumps(headnodes)
 
 @rest_call('GET', '/project/<project>/nodes')
 def list_project_nodes(project):
@@ -828,12 +868,42 @@ def show_headnode(nodename):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
-    return json.dumps({
-        'name': headnode.label,
-        'project': headnode.project.label,
-        'hnics': [n.label for n in headnode.hnics],
-        'vncport': headnode.get_vncport(),
-    })
+
+    from cStringIO import StringIO
+    import sys
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaas_stdout = sys.stdout
+        sys.stdout = mystdout = StringIO()
+
+        #make call to base haas
+        b_project = headnode.project.label
+        cli.show_headnode(nodename + b_project) 
+        
+        sys.stdout = bHaas_stdout
+        bHaaS_output = mystdout.getvalue()
+        mystdout.close()
+        
+        temp_dic = json.loads(bHaaS_output.replace("'", "\""))
+
+        vncport = temp_dic['vncport']
+
+        #print(headnode_bHaaS['vncport'])
+        print('*******Hello********')
+        #print(headnode_bHaaS)
+        return json.dumps({
+            'name': headnode.label,
+            'project': headnode.project.label,
+            'hnics': [n.label for n in headnode.hnics],
+            'vncport': vncport,
+        })
+    else:
+        return json.dumps({
+            'name': headnode.label,
+            'project': headnode.project.label,
+            'hnics': [n.label for n in headnode.hnics],
+            'vncport': headnode.get_vncport(),
+        })
 
 
 @rest_call('GET', '/headnode_images/')
