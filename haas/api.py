@@ -25,6 +25,8 @@ from haas.config import cfg
 from moc.rest import APIError, rest_call
 from subprocess import check_output, STDOUT
 from string import find
+
+
 class NotFoundError(APIError):
     """An exception indicating that a given resource does not exist."""
     status_code = 404 # Not Found
@@ -871,12 +873,12 @@ def show_headnode(nodename):
     import sys
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        bHaas_out = sys.stdout
+        bHaas_stdout = sys.stdout
         sys.stdout = mystdout = StringIO()
-
+  
         #make call to base haas
         b_project = headnode.project.label
-        cli.show_headnode(nodename + b_project) 
+        cli.show_headnode(nodename +'_' + b_project) 
         
         sys.stdout = bHaas_stdout
         bHaaS_output = mystdout.getvalue()
