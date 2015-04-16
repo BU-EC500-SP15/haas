@@ -74,6 +74,20 @@ class ServerError(APIError):
     """
     status_code = 500
 
+def error_checker(bHaaS_out):
+    # TO DO: This still needs some way to gracefully handle an error it doesn't find in the dictionary
+    
+    pos = find(bHaaS_out, "Unexpected status code") 
+        
+    if (pos < 0):
+        return #go back up and continue
+        
+    else:   
+        pos = find(bHaaS_out, "{")
+        parsed = json.loads(bHaaS_out[pos:])
+        raise error_lookup(parsed['type'], 'bHaaS Error: ' + parsed['msg'])
+        
+
 def error_lookup(err_str, msg):
     error_dict = { 
         'NotFoundError'     : NotFoundError(msg),
@@ -85,7 +99,7 @@ def error_lookup(err_str, msg):
         'IllegalStateError' : IllegalStateError(msg),
         'ServerError'       : ServerError(msg)
     }
-    return error_dict[err_str];
+    return error_dict[err_str]
 
 
 
@@ -370,40 +384,20 @@ def headnode_create(headnode, project, base_img):
     """
 
     
-    #first check locally to see if the headnode already exists
+    # first check the local database to make sure the headnode doesn't already exist
+    # and the project is valid
 
     db = model.Session()
-
     _assert_absent(db, model.Headnode, headnode)
+    project = _must_find(db, model.Project, project)
     
     #check for recursive HaaS instance, pass down to base HaaS and check for success/failure
     if cfg.getboolean('recursive', 'rHaaS'):
-        print "HELLO!"
         b_project = cfg.get('recursive', 'project')
-        bHaaS_out = check_output(['haas','headnode_create', headnode+'_'+project, b_project, base_img],stderr=STDOUT, shell=False)
-        print "********START*************"
-       
-        #parse the string to look for an error
-        pos = find(bHaaS_out, "Unexpected status code") 
+        bHaaS_out = check_output(['haas','headnode_create', headnode+'_'+project.label, b_project, base_img],stderr=STDOUT, shell=False) 
         
-        # pos will be -1 if base HaaS didn't throw errors
-        if (pos < 0):
-            print "Success!"
-            # update the local database
-            project = _must_find(db, model.Project, project)
-            headnode = model.Headnode(project, headnode, base_img)
-            db.add(headnode)
-            db.commit()
-        else:
-            print "ERROR!"
-            print "***"
-            pos2 = find(bHaaS_out, "{")
-            parsed = json.loads(bHaaS_out[pos2:])
-            raise error_lookup(parsed['type'], 'bHaaS Error: ' + parsed['msg'])
+        error_checker(bHaaS_out)
        
-        
-        print "*****END********"
-
     #else if not recursive, do anything that should only happen @ bHaaS
     else:          
         valid_imgs = cfg.get('headnode', 'base_imgs')
@@ -411,6 +405,10 @@ def headnode_create(headnode, project, base_img):
 
         if base_img not in valid_imgs:
             raise BadArgumentError('Provided image is not a valid image.')
+
+    headnode = model.Headnode(project, headnode, base_img)
+    db.add(headnode)
+    db.commit()
     
 
 @rest_call('DELETE', '/headnode/<headnode>')
@@ -421,17 +419,17 @@ def headnode_delete(headnode):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
+    
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','headnode_delete', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    
     if not headnode.dirty:
         headnode.delete()
     for hnic in headnode.hnics:
         db.delete(hnic)
+    
     db.delete(headnode)
-
-    if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode.project.label 
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_delete(headnode.label + project)
-
     db.commit()
 
 
@@ -471,7 +469,7 @@ def headnode_stop(headnode):
     headnode.stop()
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode.project.label #why does this work???
+        project = headnode.project.label 
         b_project = cfg.get('recursive', 'project')
         cli.headnode_stop(headnode.label + project)
 
@@ -873,7 +871,7 @@ def show_headnode(nodename):
     import sys
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        bHaas_stdout = sys.stdout
+        bHaas_out = sys.stdout
         sys.stdout = mystdout = StringIO()
 
         #make call to base haas
