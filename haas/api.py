@@ -450,7 +450,8 @@ def headnode_start(headnode):
     if cfg.getboolean('recursive', 'rHaaS'):
         bHaaS_out = check_output(['haas','headnode_start', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
         error_checker(bHaaS_out)
-        headnode.dirty = False; #does this need to be kept track of at every level, or only at hardware level?
+        #headnode.start() sets headnode.dirty to false; should this be done at every level?
+        headnode.dirty = False; 
     
     else:
         if headnode.dirty:
@@ -562,6 +563,7 @@ def headnode_connect_network(headnode, hnic, network):
         raise BadArgumentError("Headnodes may only be connected to networks "
                                "allocated by the project.")
 
+    #possibly move this to a base-HaaS only clause, depending on decision
     if not headnode.dirty:
         raise IllegalStateError
 
@@ -570,10 +572,16 @@ def headnode_connect_network(headnode, hnic, network):
     if (network.access is not None) and (network.access is not project):
         raise ProjectMismatchError("Project does not have access to given network.")
 
-    hnic.network = network
-    
     if cfg.getboolean('recursive','rHaaS'):
-        cli.headnode_connect_network(headnode.label + '_' + project.label, hnic.label + '_' + project.label, network.label +'_' + project.label)
+        bHaaS_out = check_output(['haas','headnode_connect_network', 
+                                   headnode.label+'_'+project.label, 
+                                   hnic.label+'_'+project.label,
+                                   network.label+'_'+project.label],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+
+    hnic.network = network
        
     db.commit()
 
@@ -592,11 +600,17 @@ def headnode_detach_network(headnode, hnic):
     if not headnode.dirty:
         raise IllegalStateError
 
-    hnic.network = None
-    
-    if cfg.getboolean('recursive','rHaas'):
+    if cfg.getboolean('recursive','rHaaS'):
         project = headnode.project.label
-        cli.headnode_detach_network(headnode.label+'_'+project, hnic.label+'_'+project) 
+        bHaaS_out = check_output(['haas','headnode_detach_network', 
+                                   headnode.label+'_'+project, 
+                                   hnic.label+'_'+project],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+  
+    hnic.network = None
+
     db.commit()
 
                             # Network Code #
