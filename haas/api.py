@@ -446,14 +446,16 @@ def headnode_start(headnode):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
-    if headnode.dirty:
-        headnode.create()
-    headnode.start()
-
+    
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode.project.label 
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_start(headnode.label + project)
+        bHaaS_out = check_output(['haas','headnode_start', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+        headnode.dirty = False; #does this need to be kept track of at every level, or only at hardware level?
+    
+    else:
+        if headnode.dirty:
+            headnode.create()
+        headnode.start()
 
     db.commit()
 
@@ -468,12 +470,12 @@ def headnode_stop(headnode):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
-    headnode.stop()
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode.project.label 
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_stop(headnode.label + project)
+        bHaaS_out = check_output(['haas','headnode_stop', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        headnode_stop()
 
 
 @rest_call('PUT', '/headnode/<headnode>/hnic/<hnic>')
@@ -489,6 +491,7 @@ def headnode_create_hnic(headnode, hnic):
     headnode = _must_find(db, model.Headnode, headnode)
     _assert_absent_n(db, headnode, model.Hnic, hnic)
 
+    #where to put this line depend on whether we track Headnode.dirty at every level
     if not headnode.dirty:
         raise IllegalStateError
 
@@ -497,8 +500,13 @@ def headnode_create_hnic(headnode, hnic):
 
     if cfg.getboolean('recursive','rHaaS'):
         project = headnode.project.label
-        cli.headnode_create_hnic(headnode.label + '_' + project, hnic.label + '_' + project)
-        
+        bHaaS_out = check_output(['haas','headnode_create_hnic', 
+                                   headnode.label+'_'+project, 
+                                   hnic.label+'_'+project],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+
     db.commit()
 
 
@@ -512,15 +520,22 @@ def headnode_delete_hnic(headnode, hnic):
     headnode = _must_find(db, model.Headnode, headnode)
     hnic = _must_find_n(db, headnode, model.Hnic, hnic)
 
+    #move this later if needed based on where-to-track decision
     if not headnode.dirty:
         raise IllegalStateError
     if not hnic:
         raise NotFoundError("Hnic: " + hnic.label)
-
-    db.delete(hnic)
-    if cfg.get('recursive','rHaaS'):
+    
+    if cfg.getboolean('recursive','rHaaS'):
         project = headnode.project.label
-        cli.headnode_delete_hnic(headnode.label + '_' + project, hnic.label + '_' + project)
+        bHaaS_out = check_output(['haas','headnode_delete_hnic', 
+                                   headnode.label+'_'+project, 
+                                   hnic.label+'_'+project],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+    
+    db.delete(hnic)
     db.commit()
 
 
@@ -868,7 +883,7 @@ def show_headnode(nodename):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
-
+    
     from cStringIO import StringIO
     import sys
 
