@@ -76,35 +76,6 @@ class ServerError(APIError):
     """
     status_code = 500
 
-def error_checker(bHaaS_out):
-    # TO DO: This still needs some way to gracefully handle an error it doesn't find in the dictionary
-    
-    pos = find(bHaaS_out, "Unexpected status code") 
-        
-    if (pos < 0):
-        return #go back up and continue
-        
-    else:   
-        pos = find(bHaaS_out, "{")
-        parsed = json.loads(bHaaS_out[pos:])
-        raise error_lookup(parsed['type'], 'bHaaS Error: ' + parsed['msg'])
-        
-
-def error_lookup(err_str, msg):
-    error_dict = { 
-        'NotFoundError'     : NotFoundError(msg),
-        'DuplicateError'    : DuplicateError(msg),
-        'AllocationError'   : AllocationError(msg),
-        'BadArgumentError'  : BadArgumentError(msg),
-        'ProjectMismatchError': ProjectMismatchError(msg),
-        'BlockedError'      : BlockedError(msg),
-        'IllegalStateError' : IllegalStateError(msg),
-        'ServerError'       : ServerError(msg)
-    }
-    return error_dict[err_str]
-
-
-
 @rest_call('PUT', '/user/<user>')
 def user_create(user, password):
     """Create user with given password.
@@ -263,18 +234,17 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
 
 @rest_call('POST', '/node/<node>/power_cycle')
 def node_power_cycle(node):
-    isHaas = cfg.get('rHaas', 'isTrue')
-    if isHaas == "Yes":
-        #raise ServerError('Good job!  Sticker?')
-        db = model.Session()
-        node = _must_find(db, model.Node, node)
-        if not node.power_cycle():
-            raise ServerError('Could not power cycle node %s' % node.label)
+
+    db = model.Session()
+    node = _must_find(db, model.Node, node) 
+    
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','node_power_cycle', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
     else:
-        db = model.Session()
-        node = _must_find(db, model.Node, node)
         if not node.power_cycle():
             raise ServerError('Could not power cycle node %s' % node.label)
+
 
 
 @rest_call('DELETE', '/node/<node>')
@@ -332,19 +302,27 @@ def node_connect_network(node, nic, network):
     nic = _must_find_n(db, node, model.Nic, nic)
     network = _must_find(db, model.Network, network)
 
+    #FIXME - The final architecture of this function depends on
+    #           a) whether we track NetworkingAction in the DB at each level, or just at base
+    #           b) final decisions on network naming conventions (see notes in network_create)
+    #FOR NOW, this is coded so that NetworkingAction is only tracked & checked at bHaaS
+
     if not node.project:
         raise ProjectMismatchError("Node not in project")
 
     project = node.project
 
-    if nic.current_action:
-        raise BlockedError("A networking operation is already active on the nic.")
-
     if (network.access is not None) and (network.access is not project):
         raise ProjectMismatchError("Project does not have access to given network.")
-
-    db.add(model.NetworkingAction(nic, network))
-    db.commit()
+    
+    elif cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','node_connect_network', node.label, nic.label, network.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        if nic.current_action:
+            raise BlockedError("A networking operation is already active on the nic.")
+        db.add(model.NetworkingAction(nic, network))
+        db.commit()
 
 @rest_call('POST', '/node/<node>/nic/<nic>/detach_network')
 def node_detach_network(node, nic):
@@ -359,19 +337,21 @@ def node_detach_network(node, nic):
     if not node.project:
         raise ProjectMismatchError("Node not in project")
 
-    project = nic.owner.project
+    #Structure here also depends on where NetworkingAction is tracked
 
-    if nic.current_action:
-        raise BlockedError("A networking operation is already active on the nic.")
-
-    db.add(model.NetworkingAction(nic, None))
-    db.commit()
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','node_detach_network', node.label, nic.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        if nic.current_action:
+            raise BlockedError("A networking operation is already active on the nic.")
+        db.add(model.NetworkingAction(nic, None))
+        db.commit()
 
 
                             # Head Node Code #
                             ##################
 
-import cli
 @rest_call('PUT', '/headnode/<headnode>')
 def headnode_create(headnode, project, base_img):
     """Create headnode.
@@ -451,6 +431,8 @@ def headnode_start(headnode):
         bHaaS_out = check_output(['haas','headnode_start', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
         error_checker(bHaaS_out)
         #headnode.start() sets headnode.dirty to false; should this be done at every level?
+        # doing so eliminates having to pass the call all the way down, only to bounce IllegalStateError back up
+        # but does it have any other implications?
         headnode.dirty = False; 
     
     else:
@@ -657,16 +639,33 @@ def network_create(network, creator, access, net_id):
         else:
             access = _must_find(db, model.Project, access)
 
-    # Allocate net_id, if requested
-    if net_id == "":
-        driver_name = cfg.get('general', 'driver')
-        driver = importlib.import_module('haas.drivers.' + driver_name)
-        net_id = driver.get_new_network_id(db)
-        if net_id is None:
-            raise AllocationError('No more networks')
-        allocated = True
+    if cfg.getboolean('recursive','rHaaS'):
+        project = model.Project.label
+
+        if creator.label == "admin":  
+            b_creator = cfg.get('recursive','project')
+        else:
+            b_creator = model.Project.label
+
+        bHaaS_out = check_output(['haas','network_create', 
+                                   network+'_'+project, 
+                                   b_creator, #how to handle case of admin in rHaaS?
+                                   b_creator,  #access and creator must be the same?
+                                   ""], 
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out) #can you get the assigned netID here? for now just dummy it out?
     else:
-        allocated = False
+        # Allocate net_id, if requested
+        if net_id == "":
+            driver_name = cfg.get('general', 'driver')
+            driver = importlib.import_module('haas.drivers.' + driver_name)
+            net_id = driver.get_new_network_id(db)
+            if net_id is None:
+                raise AllocationError('No more networks')
+            allocated = True
+        else:
+            allocated = False
 
     network = model.Network(creator, access, allocated, net_id, network)
     db.add(network)
@@ -897,7 +896,7 @@ def show_headnode(nodename):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
-    
+    # does this actually need to be recursive? what is vncport
     from cStringIO import StringIO
     import sys
 
@@ -949,33 +948,52 @@ def list_headnode_images():
 
 
     # Console code #
-    ################
+    ############
+
+# FIXME (?) Maybe this is OK - In dry run, stop_console and show_console always throw NotFoundError 
+# probably because Dry Run returns "None"
+
 
 @rest_call('GET', '/node/<nodename>/console')
 def show_console(nodename):
     """Show the contents of the console log."""
     db = model.Session()
     node = _must_find(db, model.Node, nodename)
-    log = node.get_console()
-    if log is None:
-        raise NotFoundError('The console log for %s '
+    #for now we are assumming the node is named the same in rHaaS & bHaaS
+   
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','show_console', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    
+    else:
+        log = node.get_console()
+        if log is None:
+            raise NotFoundError('The console log for %s '
                             'does not exist.' % nodename)
-    return log
+        return log
 
 @rest_call('PUT', '/node/<nodename>/console')
 def start_console(nodename):
     """Start logging output from the console."""
     db = model.Session()
     node = _must_find(db, model.Node, nodename)
-    node.start_console()
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','start_console', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        node.start_console()
 
 @rest_call('DELETE', '/node/<nodename>/console')
 def stop_console(nodename):
     """Stop logging output from the console and delete the log."""
     db = model.Session()
     node = _must_find(db, model.Node, nodename)
-    node.stop_console()
-    node.delete_console()
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','show_console', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        node.stop_console()
+        node.delete_console()
 
 
     # Helper functions #
@@ -1057,3 +1075,31 @@ def _must_find_n(session, obj_outer, cls_inner, name_inner):
                             (cls_inner.__name__, name_inner,
                              obj_outer.__class__.__name__, obj_outer.label))
     return obj_inner
+
+
+def error_checker(bHaaS_out):
+    # TO DO: This still needs some way to gracefully handle an error it doesn't find in the dictionary
+    
+    pos = find(bHaaS_out, "Unexpected status code") 
+        
+    if (pos < 0):
+        return #go back up and continue
+        
+    else:   
+        pos = find(bHaaS_out, "{")
+        parsed = json.loads(bHaaS_out[pos:])
+        raise error_lookup(parsed['type'], 'bHaaS Error: ' + parsed['msg'])
+        
+
+def error_lookup(err_str, msg):
+    error_dict = { 
+        'NotFoundError'     : NotFoundError(msg),
+        'DuplicateError'    : DuplicateError(msg),
+        'AllocationError'   : AllocationError(msg),
+        'BadArgumentError'  : BadArgumentError(msg),
+        'ProjectMismatchError': ProjectMismatchError(msg),
+        'BlockedError'      : BlockedError(msg),
+        'IllegalStateError' : IllegalStateError(msg),
+        'ServerError'       : ServerError(msg)
+    }
+    return error_dict[err_str]
