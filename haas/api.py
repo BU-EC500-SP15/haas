@@ -916,7 +916,7 @@ def show_headnode(nodename):
     # does this actually need to be recursive? what is vncport
     from cStringIO import StringIO
     import sys
-
+    import cli
     if cfg.getboolean('recursive', 'rHaaS'):
         bHaas_stdout = sys.stdout
         sys.stdout = mystdout = StringIO()
