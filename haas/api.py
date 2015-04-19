@@ -305,7 +305,8 @@ def node_connect_network(node, nic, network):
     #FIXME - The final architecture of this function depends on
     #           a) whether we track NetworkingAction in the DB at each level, or just at base
     #           b) final decisions on network naming conventions (see notes in network_create)
-    #FOR NOW, this is coded so that NetworkingAction is only tracked & checked at bHaaS
+    #
+    # FOR NOW, this is coded so that NetworkingAction is only tracked & checked at bHaaS
 
     if not node.project:
         raise ProjectMismatchError("Node not in project")
@@ -640,21 +641,30 @@ def network_create(network, creator, access, net_id):
             access = _must_find(db, model.Project, access)
 
     if cfg.getboolean('recursive','rHaaS'):
-        project = model.Project.label
 
-        if creator.label == "admin":  
-            b_creator = cfg.get('recursive','project')
-        else:
-            b_creator = model.Project.label
+        #TODO - work out whether there is such a thing as an admin-created network in rHaaS
+        # if so, how do we handle this case at bHaaS
+        
+        project = creator.label
+        b_project = cfg.get('recursive','project')
+        allocated = True; #rHaaS always has allocated netIDs
+        net_id = "dummy";
+
+        #if creator.label == "admin":  
+        #   b_project = cfg.get('recursive','project')
+        #else:
+        #   project = creator.label
+        #   print project
 
         bHaaS_out = check_output(['haas','network_create', 
                                    network+'_'+project, 
-                                   b_creator, #how to handle case of admin in rHaaS?
-                                   b_creator,  #access and creator must be the same?
+                                   b_project,  #how to handle case of admin in rHaaS?
+                                   b_project,  #access and creator must be the same?
                                    ""], 
                                    stderr=STDOUT, 
                                    shell=False) 
         error_checker(bHaaS_out) #can you get the assigned netID here? for now just dummy it out?
+        network = model.Network(creator, access, allocated, net_id, network)
     else:
         # Allocate net_id, if requested
         if net_id == "":
@@ -666,8 +676,8 @@ def network_create(network, creator, access, net_id):
             allocated = True
         else:
             allocated = False
-
-    network = model.Network(creator, access, allocated, net_id, network)
+        network = model.Network(creator, access, allocated, net_id, network)
+  
     db.add(network)
     db.commit()
 
@@ -681,16 +691,23 @@ def network_delete(network):
     db = model.Session()
     network = _must_find(db, model.Network, network)
 
-    if network.nics:
-        raise BlockedError("Network still connected to nodes")
-    if network.hnics:
-        raise BlockedError("Network still connected to headnodes")
-    if network.scheduled_nics:
-        raise BlockedError("Network scheduled to become connected to nodes.")
-    if network.allocated:
-        driver_name = cfg.get('general', 'driver')
-        driver = importlib.import_module('haas.drivers.' + driver_name)
-        driver.free_network_id(db, network.network_id)
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','network_delete', 
+                                   network.label+'_'+network.creator.label], 
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        if network.nics:
+            raise BlockedError("Network still connected to nodes")
+        if network.hnics:
+            raise BlockedError("Network still connected to headnodes")
+        if network.scheduled_nics:
+            raise BlockedError("Network scheduled to become connected to nodes.")
+        if network.allocated:
+            driver_name = cfg.get('general', 'driver')
+            driver = importlib.import_module('haas.drivers.' + driver_name)
+            driver.free_network_id(db, network.network_id)
 
     db.delete(network)
     db.commit()
@@ -1078,7 +1095,7 @@ def _must_find_n(session, obj_outer, cls_inner, name_inner):
 
 
 def error_checker(bHaaS_out):
-    # TO DO: This still needs some way to gracefully handle an error it doesn't find in the dictionary
+    # TODO: This still needs some way to gracefully handle an error it doesn't find in the dictionary
     
     pos = find(bHaaS_out, "Unexpected status code") 
         
