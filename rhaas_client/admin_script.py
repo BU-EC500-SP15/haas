@@ -1,22 +1,14 @@
 from __future__ import print_function
+import ast
 
 import sys
 import fileinput
-from haas import cli
-from cStringIO import StringIO
-from subprocess import check_call, call, check_output
-
-DELETE = sys.argv[0]
-
-ipmiUser = "ADMIN_USER"
-ipmiPass = "ADMIN_PASSWORD"
+from subprocess import check_output
 
 BHAAS_ENDPOINT = 'http://127.0.0.1:5000'
 RHAAS_ENDPOINT = 'http://127.0.0.1:5001'
 
-
 def haas(*args):
-    #print (args)
     args = map(str, args)
     return check_output(['haas'] + args)
 
@@ -31,10 +23,14 @@ def main():
 
     changeEndpoint(BHAAS_ENDPOINT, RHAAS_ENDPOINT)
 
-    bHaaS_output = haas('list_project_nodes', 'Test')
+    bHaaS_output = haas('list_project_nodes', 'Test') #admin needs to know the name of the project in bHaas
 
     print("************")
-    print(bHaaS_output)
+    print("************")
+
+    bHaaS_output = ast.literal_eval(bHaaS_output) #convert to list
+    print('Here are node names in bHaaS:', bHaaS_output)
+    print('This is how any you have:', len(bHaaS_output))
 
     changeEndpoint(RHAAS_ENDPOINT, BHAAS_ENDPOINT)
 

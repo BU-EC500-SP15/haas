@@ -20,7 +20,10 @@ import importlib
 import json
 import logging
 import os
+import cli #added to enable recursive calls
+import sys #added to enable reading output at bHaaS.  Laura might have a better/ different solution 
 
+from cStringIO import StringIO #added to enable reading output at bHaaS.  Laura might have a better/ different solution 
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
@@ -342,7 +345,6 @@ def node_detach_network(node, nic):
                             # Head Node Code #
                             ##################
 
-import cli
 @rest_call('PUT', '/headnode/<headnode>')
 def headnode_create(headnode, project, base_img):
     """Create headnode.
@@ -367,15 +369,16 @@ def headnode_create(headnode, project, base_img):
     db = model.Session()
 
     _assert_absent(db, model.Headnode, headnode)
-    project_db = _must_find(db, model.Project, project)
 
-    headnode_db = model.Headnode(project_db, headnode, base_img)
+    project = _must_find(db, model.Project, project)
 
-    db.add(headnode_db)
+    headnode = model.Headnode(project, headnode, base_img)
+    
+    db.add(headnode)
 
     if cfg.getboolean('recursive', 'rHaaS'):
         b_project = cfg.get('recursive', 'project')
-        cli.headnode_create(headnode + project, b_project, base_img) 
+        cli.headnode_create(headnode.label + project.label, b_project, base_img) 
     
     db.commit()
 
@@ -387,18 +390,17 @@ def headnode_delete(headnode):
     If the node does not exist, a NotFoundError will be raised.
     """
     db = model.Session()
-    headnode_db = _must_find(db, model.Headnode, headnode)
-    if not headnode_db.dirty:
-        headnode_db.delete()
-    for hnic in headnode_db.hnics:
+
+    headnode = _must_find(db, model.Headnode, headnode)
+    if not headnode.dirty:
+        headnode.delete()
+    for hnic in headnode.hnics:
         db.delete(hnic)
-    db.delete(headnode_db)
+    db.delete(headnode)
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode_db.project.label 
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_delete(headnode + project)
-
+        cli.headnode_delete(headnode.label + headnode.project.label)
+    
     db.commit()
 
 
@@ -412,15 +414,13 @@ def headnode_start(headnode):
     an IllegalStateException), with the exception of headnode_stop.
     """
     db = model.Session()
-    headnode_db = _must_find(db, model.Headnode, headnode)
-    if headnode_db.dirty:
-        headnode_db.create()
-    headnode_db.start()
+    headnode = _must_find(db, model.Headnode, headnode)
+    if headnode.dirty:
+        headnode.create()
+    headnode.start()
 
-    if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode_db.project.label 
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_start(headnode + project)
+    if cfg.getboolean('recursive', 'rHaaS'): 
+        cli.headnode_start(headnode.label + headnode.project.label)
 
     db.commit()
 
@@ -434,13 +434,11 @@ def headnode_stop(headnode):
     headnode_start will be the only valid API call after the VM is powered off.
     """
     db = model.Session()
-    headnode_db = _must_find(db, model.Headnode, headnode)
-    headnode_db.stop()
+    headnode = _must_find(db, model.Headnode, headnode)
+    headnode.stop()
 
     if cfg.getboolean('recursive', 'rHaaS'):
-        project = headnode_db.project.label #why does this work???
-        b_project = cfg.get('recursive', 'project')
-        cli.headnode_stop(headnode + project)
+        cli.headnode_stop(headnode.label + headnode.project.label)
 
 
 @rest_call('PUT', '/headnode/<headnode>/hnic/<hnic>')
@@ -820,16 +818,12 @@ def show_headnode(nodename):
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
 
-    from cStringIO import StringIO
-    import sys
-
     if cfg.getboolean('recursive', 'rHaaS'):
         bHaas_stdout = sys.stdout
-        sys.stdout = mystdout = StringIO()
+        sys.stdout = mystdout = StringIO() #read std out at bHaaS.  Laura might have a better/ different solution discovered during error detection
 
         #make call to base haas
-        b_project = headnode.project.label
-        cli.show_headnode(nodename + b_project) 
+        cli.show_headnode(nodename + headnode.project.label)
         
         sys.stdout = bHaas_stdout
         bHaaS_output = mystdout.getvalue()
@@ -839,15 +833,13 @@ def show_headnode(nodename):
 
         vncport = temp_dic['vncport']
 
-        #print(headnode_bHaaS['vncport'])
-        print('*******Hello********')
-        #print(headnode_bHaaS)
         return json.dumps({
             'name': headnode.label,
             'project': headnode.project.label,
             'hnics': [n.label for n in headnode.hnics],
             'vncport': vncport,
         })
+
     else:
         return json.dumps({
             'name': headnode.label,
