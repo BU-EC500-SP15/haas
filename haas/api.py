@@ -258,6 +258,12 @@ def node_delete(node):
     node.stop_console()
     node.delete_console()
     db.delete(node)
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        b_project = cfg.get('recursive','project')
+        bHaaS_out = check_output(['haas','project_detach_node', b_project, node.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+
     db.commit()
 
 
