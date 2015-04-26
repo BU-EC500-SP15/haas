@@ -20,6 +20,9 @@ import importlib
 import json
 import logging
 
+#For recursion
+import cli
+
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
@@ -377,13 +380,20 @@ def headnode_create(headnode, project, base_img):
     If the project does not exist, a NotFoundError will be raised.
 
     """
+    if not cfg.getboolean('recursive', 'rHaaS'):
+        valid_imgs = cfg.get('headnode', 'base_imgs')
+        valid_imgs = [img.strip() for img in valid_imgs.split(',')]
 
+        if base_img not in valid_imgs:
+            raise BadArgumentError('Provided image is not a valid image.')
     
     # first check the local database to make sure the headnode doesn't already exist
     # and the project is valid
 
+
     db = model.Session()
     _assert_absent(db, model.Headnode, headnode)
+
     project = _must_find(db, model.Project, project)
     
     #check for recursive HaaS instance, pass down to base HaaS and check for success/failure
@@ -629,6 +639,7 @@ def network_create(network, creator, access, net_id):
     db = model.Session()
     _assert_absent(db, model.Network, network)
 
+
     # Check legality of arguments, and find correct 'access' and 'creator'
     if creator != "admin":
         # Project-owned network
@@ -685,6 +696,13 @@ def network_create(network, creator, access, net_id):
         network = model.Network(creator, access, allocated, net_id, network)
   
     db.add(network)
+    
+    if cfg.getboolean('recursive', 'rHaaS'):
+        b_project = cfg.get('recursive', 'project')
+        network_name = network.label + b_project
+        net_id = ''
+        cli.network_create(network_name, b_project, b_project, net_id)
+
     db.commit()
 
 
@@ -716,6 +734,12 @@ def network_delete(network):
             driver.free_network_id(db, network.network_id)
 
     db.delete(network)
+    
+    if cfg.getboolean('recursive', 'rHaaS'):
+        b_project = cfg.get('recursive', 'project')
+        network_name = network.label + b_project 
+        cli.network_delete(network_name)
+
     db.commit()
 
 
@@ -820,6 +844,7 @@ def list_projects():
     db = model.Session()
     projects = db.query(model.Project.label).all()
     projects = [project[0] for project in projects] 
+
     return json.dumps(projects)
 
 @rest_call('GET', '/project/<project>/headnodes')
@@ -835,6 +860,7 @@ def list_project_headnodes(project):
     headnodes = project.headnode
     headnodes = [n.label for n in headnodes]
     return json.dumps(headnodes)
+
 
 @rest_call('GET', '/project/<project>/nodes')
 def list_project_nodes(project):
