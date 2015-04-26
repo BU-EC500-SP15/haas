@@ -26,6 +26,8 @@ import cli
 from haas import model
 from haas.config import cfg
 from moc.rest import APIError, rest_call
+from subprocess import check_output, STDOUT
+from string import find
 
 
 class NotFoundError(APIError):
@@ -77,7 +79,6 @@ class ServerError(APIError):
     """
     status_code = 500
 
-
 @rest_call('PUT', '/user/<user>')
 def user_create(user, password):
     """Create user with given password.
@@ -106,6 +107,18 @@ def user_delete(user):
                             # Project Code #
                             ################
 
+@rest_call('GET', '/project')
+def project_list():
+    """List all existing projects.
+
+    Returns a JSON array of strings representing a list of projects.
+
+    Example: '["project1", "project2", "project3"]'
+    """
+    db = model.Session()
+    project = db.query(model.Project).all()
+    project = [p.label for p in project]
+    return json.dumps(project)
 
 @rest_call('PUT', '/project/<project>')
 def project_create(project):
@@ -226,7 +239,8 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
 
     If the node already exists, a DuplicateError will be raised.
     """
-    db = model.Session()
+
+    db = model.Session() #start talking to the database
     _assert_absent(db, model.Node, node)
     node = model.Node(node, ipmi_host, ipmi_user, ipmi_pass)
     db.add(node)
@@ -235,10 +249,17 @@ def node_register(node, ipmi_host, ipmi_user, ipmi_pass):
 
 @rest_call('POST', '/node/<node>/power_cycle')
 def node_power_cycle(node):
+
     db = model.Session()
-    node = _must_find(db, model.Node, node)
-    if not node.power_cycle():
-        raise ServerError('Could not power cycle node %s' % node.label)
+    node = _must_find(db, model.Node, node) 
+    
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','node_power_cycle', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        if not node.power_cycle():
+            raise ServerError('Could not power cycle node %s' % node.label)
+
 
 
 @rest_call('DELETE', '/node/<node>')
@@ -252,6 +273,12 @@ def node_delete(node):
     node.stop_console()
     node.delete_console()
     db.delete(node)
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        b_project = cfg.get('recursive','project')
+        bHaaS_out = check_output(['haas','project_detach_node', b_project, node.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+
     db.commit()
 
 
@@ -301,11 +328,15 @@ def node_connect_network(node, nic, network):
 
     project = node.project
 
-    if nic.current_action:
-        raise BlockedError("A networking operation is already active on the nic.")
-
     if (network.access is not None) and (network.access is not project):
         raise ProjectMismatchError("Project does not have access to given network.")
+
+    if nic.current_action:
+        raise BlockedError("A networking operation is already active on the nic.")
+    
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','node_connect_network', node.label, nic.label, network.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
 
     db.add(model.NetworkingAction(nic, network))
     db.commit()
@@ -323,10 +354,12 @@ def node_detach_network(node, nic):
     if not node.project:
         raise ProjectMismatchError("Node not in project")
 
-    project = nic.owner.project
-
     if nic.current_action:
         raise BlockedError("A networking operation is already active on the nic.")
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','node_detach_network', node.label, nic.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
 
     db.add(model.NetworkingAction(nic, None))
     db.commit()
@@ -334,7 +367,6 @@ def node_detach_network(node, nic):
 
                             # Head Node Code #
                             ##################
-
 
 @rest_call('PUT', '/headnode/<headnode>')
 def headnode_create(headnode, project, base_img):
@@ -352,23 +384,39 @@ def headnode_create(headnode, project, base_img):
         valid_imgs = cfg.get('headnode', 'base_imgs')
         valid_imgs = [img.strip() for img in valid_imgs.split(',')]
 
+<<<<<<< HEAD
         if base_img not in valid_imgs:
             raise BadArgumentError('Provided image is not a valid image.')
-    db = model.Session()
-
-    _assert_absent(db, model.Headnode, headnode)
-    project_db = _must_find(db, model.Project, project)
-
-    headnode_db = model.Headnode(project_db, headnode, base_img)
-
-    db.add(headnode_db)
+=======
     
+    # first check the local database to make sure the headnode doesn't already exist
+    # and the project is valid
+
+
+    db = model.Session()
+    _assert_absent(db, model.Headnode, headnode)
+
+    project = _must_find(db, model.Project, project)
+    
+    #check for recursive HaaS instance, pass down to base HaaS and check for success/failure
     if cfg.getboolean('recursive', 'rHaaS'):
         b_project = cfg.get('recursive', 'project')
-        cli.headnode_create(headnode + project, b_project, base_img)
+        bHaaS_out = check_output(['haas','headnode_create', headnode+'_'+project.label, b_project, base_img],stderr=STDOUT, shell=False) 
+        
+        error_checker(bHaaS_out)
+       
+    #else if not recursive, do anything that should only happen @ bHaaS
+    else:          
+        valid_imgs = cfg.get('headnode', 'base_imgs')
+        valid_imgs = [img.strip() for img in valid_imgs.split(',')]
 
+        if base_img not in valid_imgs:
+            raise BadArgumentError('Provided image is not a valid image.')
+
+    headnode = model.Headnode(project, headnode, base_img)
+    db.add(headnode)
     db.commit()
-
+    
 
 @rest_call('DELETE', '/headnode/<headnode>')
 def headnode_delete(headnode):
@@ -378,10 +426,16 @@ def headnode_delete(headnode):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
+    
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','headnode_delete', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    
     if not headnode.dirty:
         headnode.delete()
     for hnic in headnode.hnics:
         db.delete(hnic)
+    
     db.delete(headnode)
     db.commit()
 
@@ -397,9 +451,17 @@ def headnode_start(headnode):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
-    if headnode.dirty:
-        headnode.create()
-    headnode.start()
+    
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','headnode_start', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+        #TODO: is there some way to record headnode.dirty on the rHaaS database also? headnode.dirty = False breaks things
+    
+    else:
+        if headnode.dirty:
+            headnode.create()
+        headnode.start()
+
     db.commit()
 
 
@@ -413,7 +475,12 @@ def headnode_stop(headnode):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, headnode)
-    headnode.stop()
+
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','headnode_stop', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        headnode_stop()
 
 
 @rest_call('PUT', '/headnode/<headnode>/hnic/<hnic>')
@@ -434,6 +501,16 @@ def headnode_create_hnic(headnode, hnic):
 
     hnic = model.Hnic(headnode, hnic)
     db.add(hnic)
+
+    if cfg.getboolean('recursive','rHaaS'):
+        project = headnode.project.label
+        bHaaS_out = check_output(['haas','headnode_create_hnic', 
+                                   headnode.label+'_'+project, 
+                                   hnic.label+'_'+project],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+
     db.commit()
 
 
@@ -451,7 +528,16 @@ def headnode_delete_hnic(headnode, hnic):
         raise IllegalStateError
     if not hnic:
         raise NotFoundError("Hnic: " + hnic.label)
-
+    
+    if cfg.getboolean('recursive','rHaaS'):
+        project = headnode.project.label
+        bHaaS_out = check_output(['haas','headnode_delete_hnic', 
+                                   headnode.label+'_'+project, 
+                                   hnic.label+'_'+project],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+    
     db.delete(hnic)
     db.commit()
 
@@ -487,13 +573,23 @@ def headnode_connect_network(headnode, hnic, network):
     if (network.access is not None) and (network.access is not project):
         raise ProjectMismatchError("Project does not have access to given network.")
 
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','headnode_connect_network', 
+                                   headnode.label+'_'+project.label, 
+                                   hnic.label+'_'+project.label,
+                                   network.label+'_'+project.label],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+
     hnic.network = network
+       
     db.commit()
 
 
 @rest_call('POST', '/headnode/<headnode>/hnic/<hnic>/detach_network')
 def headnode_detach_network(headnode, hnic):
-    """Detach a heanode's nic from any network it's on.
+    """Detach a headnode's nic from any network it's on.
 
     Raises IllegalStateError if the headnode has already been started.
     """
@@ -505,7 +601,17 @@ def headnode_detach_network(headnode, hnic):
     if not headnode.dirty:
         raise IllegalStateError
 
+    if cfg.getboolean('recursive','rHaaS'):
+        project = headnode.project.label
+        bHaaS_out = check_output(['haas','headnode_detach_network', 
+                                   headnode.label+'_'+project, 
+                                   hnic.label+'_'+project],
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+  
     hnic.network = None
+
     db.commit()
 
                             # Network Code #
@@ -553,18 +659,44 @@ def network_create(network, creator, access, net_id):
         else:
             access = _must_find(db, model.Project, access)
 
-    # Allocate net_id, if requested
-    if net_id == "":
-        driver_name = cfg.get('general', 'driver')
-        driver = importlib.import_module('haas.drivers.' + driver_name)
-        net_id = driver.get_new_network_id(db)
-        if net_id is None:
-            raise AllocationError('No more networks')
-        allocated = True
-    else:
-        allocated = False
+    if cfg.getboolean('recursive','rHaaS'):
 
-    network = model.Network(creator, access, allocated, net_id, network)
+        #TODO - work out whether there is such a thing as an admin-created network in rHaaS
+        # if so, how do we handle this case at bHaaS
+        
+        project = creator.label
+        b_project = cfg.get('recursive','project')
+        allocated = True; #rHaaS always has allocated netIDs
+        net_id = "dummy";
+
+        #if creator.label == "admin":  
+        #   b_project = cfg.get('recursive','project')
+        #else:
+        #   project = creator.label
+        #   print project
+
+        bHaaS_out = check_output(['haas','network_create', 
+                                   network+'_'+project, 
+                                   b_project,  #how to handle case of admin in rHaaS?
+                                   b_project,  #access and creator must be the same?
+                                   ""], 
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out) #can you get the assigned netID here? for now just dummy it out?
+        network = model.Network(creator, access, allocated, net_id, network)
+    else:
+        # Allocate net_id, if requested
+        if net_id == "":
+            driver_name = cfg.get('general', 'driver')
+            driver = importlib.import_module('haas.drivers.' + driver_name)
+            net_id = driver.get_new_network_id(db)
+            if net_id is None:
+                raise AllocationError('No more networks')
+            allocated = True
+        else:
+            allocated = False
+        network = model.Network(creator, access, allocated, net_id, network)
+  
     db.add(network)
     
     if cfg.getboolean('recursive', 'rHaaS'):
@@ -585,16 +717,23 @@ def network_delete(network):
     db = model.Session()
     network = _must_find(db, model.Network, network)
 
-    if network.nics:
-        raise BlockedError("Network still connected to nodes")
-    if network.hnics:
-        raise BlockedError("Network still connected to headnodes")
-    if network.scheduled_nics:
-        raise BlockedError("Network scheduled to become connected to nodes.")
-    if network.allocated:
-        driver_name = cfg.get('general', 'driver')
-        driver = importlib.import_module('haas.drivers.' + driver_name)
-        driver.free_network_id(db, network.network_id)
+    if cfg.getboolean('recursive', 'rHaaS'):
+        bHaaS_out = check_output(['haas','network_delete', 
+                                   network.label+'_'+network.creator.label], 
+                                   stderr=STDOUT, 
+                                   shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        if network.nics:
+            raise BlockedError("Network still connected to nodes")
+        if network.hnics:
+            raise BlockedError("Network still connected to headnodes")
+        if network.scheduled_nics:
+            raise BlockedError("Network scheduled to become connected to nodes.")
+        if network.allocated:
+            driver_name = cfg.get('general', 'driver')
+            driver = importlib.import_module('haas.drivers.' + driver_name)
+            driver.free_network_id(db, network.network_id)
 
     db.delete(network)
     
@@ -707,7 +846,22 @@ def list_projects():
     db = model.Session()
     projects = db.query(model.Project.label).all()
     projects = [project[0] for project in projects] 
-    return json.dumps(projects)    
+
+    return json.dumps(projects)
+
+@rest_call('GET', '/project/<project>/headnodes')
+def list_project_headnodes(project):
+    """ List all headnodes belonging the given project.
+
+    Returns a JSON array of strings representing a list of nodes.
+
+    Example:  '["node1", "node2", "node3"]'
+    """    
+    db = model.Session()
+    project = _must_find(db, model.Project, project)
+    headnodes = project.headnode
+    headnodes = [n.label for n in headnodes]
+    return json.dumps(headnodes)
 
 
 @rest_call('GET', '/project/<project>/nodes')
@@ -793,12 +947,30 @@ def show_headnode(nodename):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
+
+    # NOTE: this needs a recursive call because the vncport is only known to base HaaS
+    # If there is some way to pass that back up on creation and store it in rHaaS, 
+    # this call would not need to be recursive.
+    # 
+    if cfg.getboolean('recursive','rHaaS'):
+        b_project = headnode.project.label
+        bHaaS_out = check_output(['haas','show_headnode', headnode.label+'_'+b_project], stderr=STDOUT, shell=False) 
+        print "bhaas_out:"
+        print bHaaS_out
+        error_checker(bHaaS_out)
+        pos = find(bHaaS_out, '{') 
+        if (pos < 0):
+            raise NotFoundError('No JSON found in the base HaaS output') 
+        else:   
+            parsed = json.loads(bHaaS_out[pos:])
+    
+    headnode.dirty = True;
     return json.dumps({
-        'name': headnode.label,
-        'project': headnode.project.label,
-        'hnics': [n.label for n in headnode.hnics],
-        'vncport': headnode.get_vncport(),
-    })
+            'name': headnode.label,
+            'project': headnode.project.label,
+            'hnics': [n.label for n in headnode.hnics],
+            'vncport': parsed['vncport'],
+        })
 
 
 @rest_call('GET', '/headnode_images/')
@@ -815,33 +987,52 @@ def list_headnode_images():
 
 
     # Console code #
-    ################
+    ############
+
+# FIXME (?) Maybe this is OK - In dry run, stop_console and show_console always throw NotFoundError 
+# probably because Dry Run returns "None"
+
 
 @rest_call('GET', '/node/<nodename>/console')
 def show_console(nodename):
     """Show the contents of the console log."""
     db = model.Session()
     node = _must_find(db, model.Node, nodename)
-    log = node.get_console()
-    if log is None:
-        raise NotFoundError('The console log for %s '
+    #for now we are assumming the node is named the same in rHaaS & bHaaS
+   
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','show_console', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    
+    else:
+        log = node.get_console()
+        if log is None:
+            raise NotFoundError('The console log for %s '
                             'does not exist.' % nodename)
-    return log
+        return log
 
 @rest_call('PUT', '/node/<nodename>/console')
 def start_console(nodename):
     """Start logging output from the console."""
     db = model.Session()
     node = _must_find(db, model.Node, nodename)
-    node.start_console()
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','start_console', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        node.start_console()
 
 @rest_call('DELETE', '/node/<nodename>/console')
 def stop_console(nodename):
     """Stop logging output from the console and delete the log."""
     db = model.Session()
     node = _must_find(db, model.Node, nodename)
-    node.stop_console()
-    node.delete_console()
+    if cfg.getboolean('recursive','rHaaS'):
+        bHaaS_out = check_output(['haas','show_console', node.label], stderr=STDOUT, shell=False) 
+        error_checker(bHaaS_out)
+    else:
+        node.stop_console()
+        node.delete_console()
 
 
     # Helper functions #
@@ -923,3 +1114,41 @@ def _must_find_n(session, obj_outer, cls_inner, name_inner):
                             (cls_inner.__name__, name_inner,
                              obj_outer.__class__.__name__, obj_outer.label))
     return obj_inner
+
+
+def error_checker(bHaaS_out):
+    """ For recursive calls, this looks in the returned stdout/stderr from base HaaS
+        to see if an error has been raised by base HaaS.  If if it finds one, it calls
+        error_lookup to raise the same error locally.
+    """
+    # TODO: Does this need a way to gracefully handle an error it doesn't find in the dictionary?
+    
+    pos = find(bHaaS_out, "Unexpected status code") 
+        
+    if (pos < 0):
+        return #go back up and continue
+        
+    else:   
+        pos = find(bHaaS_out, "{")
+        parsed = json.loads(bHaaS_out[pos:])
+        raise error_lookup(parsed['type'], 'bHaaS Error: ' + parsed['msg'])
+        
+
+def error_lookup(err_str, msg):
+    error_dict = { 
+        'NotFoundError'     : NotFoundError(msg),
+        'DuplicateError'    : DuplicateError(msg),
+        'AllocationError'   : AllocationError(msg),
+        'BadArgumentError'  : BadArgumentError(msg),
+        'ProjectMismatchError': ProjectMismatchError(msg),
+        'BlockedError'      : BlockedError(msg),
+        'IllegalStateError' : IllegalStateError(msg),
+        'ServerError'       : ServerError(msg)
+    }
+    try:
+       error_out = error_dict[err_str]
+    except:
+       error_out = NotFoundError('bHaaS error not found in dictionary: %s(%s)' % (err_str, msg))
+    
+    return error_out
+       

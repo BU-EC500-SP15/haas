@@ -17,10 +17,11 @@ from haas import config
 from haas.config import cfg
 
 import inspect
+import json
+import os
+import requests
 import sys
 import urllib
-import requests
-import json
 
 from functools import wraps
 
@@ -66,7 +67,11 @@ def check_status_code(response):
 # TODO: This function's name is no longer very accurate.  As soon as it is
 # safe, we should change it to something more generic.
 def object_url(*args):
-    url = cfg.get('client', 'endpoint')
+    # Prefer an environmental variable for getting the endpoint if available.
+    url = os.environ.get('HAAS_ENDPOINT')
+    if url is None:
+        url = cfg.get('client', 'endpoint')
+
     for arg in args:
         url += '/' + urllib.quote(arg,'')
     return url
@@ -169,6 +174,12 @@ def project_remove_user(project, user):
     """Remove <user> from <project>"""
     url = object_url('project', project, 'remove_user')
     do_post(url, data={'user': user})
+
+@cmd
+def project_list():
+    """List all projects"""
+    url = object_url('project')
+    do_get(url)
 
 @cmd
 def project_create(project):
@@ -284,7 +295,7 @@ def headnode_connect_network(headnode, nic, network):
 @cmd
 def headnode_detach_network(headnode, nic):
     """Detach <headnode> from the network on given <nic>"""
-    url = object_url('headnode', headnode, 'hnic', hnic, 'detach_network')
+    url = object_url('headnode', headnode, 'hnic', nic, 'detach_network')
     do_post(url)
 
 @cmd
@@ -315,6 +326,20 @@ def port_detach_nic(port):
 def list_free_nodes():
     """List all free nodes"""
     url = object_url('free_nodes')
+    do_get(url)
+
+@cmd
+def list_projects():
+    """
+    """
+    url = object_url('project')
+    do_get(url)
+
+@cmd
+def list_project_headnodes(project):
+    """
+    """
+    url = object_url('project', project, 'headnodes')
     do_get(url)
 
 @cmd
