@@ -69,7 +69,7 @@ class AnonModel(Base):
     Its main purpose is to reduce boilerplate by doing things such as
     auto-generating table names.
     """
-    __abstract__ = True
+    __abstract__ = True 
     id = Column(Integer, primary_key=True, nullable=False)
 
     def __repr__(self):
