@@ -308,12 +308,6 @@ def node_connect_network(node, nic, network):
     nic = _must_find_n(db, node, model.Nic, nic)
     network = _must_find(db, model.Network, network)
 
-    #FIXME - The final architecture of this function depends on
-    #           a) whether we track NetworkingAction in the DB at each level, or just at base
-    #           b) final decisions on network naming conventions (see notes in network_create)
-    #
-    # FOR NOW, this is coded so that NetworkingAction is only tracked & checked at bHaaS
-
     if not node.project:
         raise ProjectMismatchError("Node not in project")
 
@@ -321,15 +315,16 @@ def node_connect_network(node, nic, network):
 
     if (network.access is not None) and (network.access is not project):
         raise ProjectMismatchError("Project does not have access to given network.")
+
+    if nic.current_action:
+        raise BlockedError("A networking operation is already active on the nic.")
     
-    elif cfg.getboolean('recursive', 'rHaaS'):
+    if cfg.getboolean('recursive', 'rHaaS'):
         bHaaS_out = check_output(['haas','node_connect_network', node.label, nic.label, network.label],stderr=STDOUT, shell=False) 
         error_checker(bHaaS_out)
-    else:
-        if nic.current_action:
-            raise BlockedError("A networking operation is already active on the nic.")
-        db.add(model.NetworkingAction(nic, network))
-        db.commit()
+
+    db.add(model.NetworkingAction(nic, network))
+    db.commit()
 
 @rest_call('POST', '/node/<node>/nic/<nic>/detach_network')
 def node_detach_network(node, nic):
@@ -344,16 +339,15 @@ def node_detach_network(node, nic):
     if not node.project:
         raise ProjectMismatchError("Node not in project")
 
-    #Structure here also depends on where NetworkingAction is tracked
+    if nic.current_action:
+        raise BlockedError("A networking operation is already active on the nic.")
 
     if cfg.getboolean('recursive', 'rHaaS'):
         bHaaS_out = check_output(['haas','node_detach_network', node.label, nic.label],stderr=STDOUT, shell=False) 
         error_checker(bHaaS_out)
-    else:
-        if nic.current_action:
-            raise BlockedError("A networking operation is already active on the nic.")
-        db.add(model.NetworkingAction(nic, None))
-        db.commit()
+
+    db.add(model.NetworkingAction(nic, None))
+    db.commit()
 
 
                             # Head Node Code #
@@ -437,10 +431,7 @@ def headnode_start(headnode):
     if cfg.getboolean('recursive', 'rHaaS'):
         bHaaS_out = check_output(['haas','headnode_start', headnode.label+'_'+headnode.project.label],stderr=STDOUT, shell=False) 
         error_checker(bHaaS_out)
-        #headnode.start() sets headnode.dirty to false; should this be done at every level?
-        # doing so eliminates having to pass the call all the way down, only to bounce IllegalStateError back up
-        # but does it have any other implications?
-        headnode.dirty = False; 
+        #TODO: is there some way to record headnode.dirty on the rHaaS database also? headnode.dirty = False breaks things
     
     else:
         if headnode.dirty:
@@ -481,7 +472,6 @@ def headnode_create_hnic(headnode, hnic):
     headnode = _must_find(db, model.Headnode, headnode)
     _assert_absent_n(db, headnode, model.Hnic, hnic)
 
-    #where to put this line depend on whether we track Headnode.dirty at every level
     if not headnode.dirty:
         raise IllegalStateError
 
@@ -510,7 +500,6 @@ def headnode_delete_hnic(headnode, hnic):
     headnode = _must_find(db, model.Headnode, headnode)
     hnic = _must_find_n(db, headnode, model.Hnic, hnic)
 
-    #move this later if needed based on where-to-track decision
     if not headnode.dirty:
         raise IllegalStateError
     if not hnic:
@@ -552,7 +541,6 @@ def headnode_connect_network(headnode, hnic, network):
         raise BadArgumentError("Headnodes may only be connected to networks "
                                "allocated by the project.")
 
-    #possibly move this to a base-HaaS only clause, depending on decision
     if not headnode.dirty:
         raise IllegalStateError
 
@@ -919,41 +907,29 @@ def show_headnode(nodename):
     """
     db = model.Session()
     headnode = _must_find(db, model.Headnode, nodename)
-    # does this actually need to be recursive? what is vncport
-    from cStringIO import StringIO
-    import sys
-    import cli
-    if cfg.getboolean('recursive', 'rHaaS'):
-        bHaas_stdout = sys.stdout
-        sys.stdout = mystdout = StringIO()
-  
-        #make call to base haas
+
+    # NOTE: this needs a recursive call because the vncport is only known to base HaaS
+    # If there is some way to pass that back up on creation and store it in rHaaS, 
+    # this call would not need to be recursive.
+    # 
+    if cfg.getboolean('recursive','rHaaS'):
         b_project = headnode.project.label
-        cli.show_headnode(nodename +'_' + b_project) 
-        
-        sys.stdout = bHaas_stdout
-        bHaaS_output = mystdout.getvalue()
-        mystdout.close()
-        
-        temp_dic = json.loads(bHaaS_output.replace("'", "\""))
-
-        vncport = temp_dic['vncport']
-
-        #print(headnode_bHaaS['vncport'])
-        print('*******Hello********')
-        #print(headnode_bHaaS)
-        return json.dumps({
+        bHaaS_out = check_output(['haas','show_headnode', headnode.label+'_'+b_project], stderr=STDOUT, shell=False) 
+        print "bhaas_out:"
+        print bHaaS_out
+        error_checker(bHaaS_out)
+        pos = find(bHaaS_out, '{') 
+        if (pos < 0):
+            raise NotFoundError('No JSON found in the base HaaS output') 
+        else:   
+            parsed = json.loads(bHaaS_out[pos:])
+    
+    headnode.dirty = True;
+    return json.dumps({
             'name': headnode.label,
             'project': headnode.project.label,
             'hnics': [n.label for n in headnode.hnics],
-            'vncport': vncport,
-        })
-    else:
-        return json.dumps({
-            'name': headnode.label,
-            'project': headnode.project.label,
-            'hnics': [n.label for n in headnode.hnics],
-            'vncport': headnode.get_vncport(),
+            'vncport': parsed['vncport'],
         })
 
 
@@ -1101,7 +1077,11 @@ def _must_find_n(session, obj_outer, cls_inner, name_inner):
 
 
 def error_checker(bHaaS_out):
-    # TODO: This still needs some way to gracefully handle an error it doesn't find in the dictionary
+    """ For recursive calls, this looks in the returned stdout/stderr from base HaaS
+        to see if an error has been raised by base HaaS.  If if it finds one, it calls
+        error_lookup to raise the same error locally.
+    """
+    # TODO: Does this need a way to gracefully handle an error it doesn't find in the dictionary?
     
     pos = find(bHaaS_out, "Unexpected status code") 
         
@@ -1125,4 +1105,10 @@ def error_lookup(err_str, msg):
         'IllegalStateError' : IllegalStateError(msg),
         'ServerError'       : ServerError(msg)
     }
-    return error_dict[err_str]
+    try:
+       error_out = error_dict[err_str]
+    except:
+       error_out = NotFoundError('bHaaS error not found in dictionary: %s(%s)' % (err_str, msg))
+    
+    return error_out
+       
