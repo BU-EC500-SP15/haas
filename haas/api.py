@@ -384,10 +384,8 @@ def headnode_create(headnode, project, base_img):
         valid_imgs = cfg.get('headnode', 'base_imgs')
         valid_imgs = [img.strip() for img in valid_imgs.split(',')]
 
-<<<<<<< HEAD
         if base_img not in valid_imgs:
             raise BadArgumentError('Provided image is not a valid image.')
-=======
     
     # first check the local database to make sure the headnode doesn't already exist
     # and the project is valid
