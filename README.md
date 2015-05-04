@@ -8,7 +8,7 @@ SETTING UP BASE HAAS
 --------------------  
 
 First, clone the repo:
-$ <git clone https://github.com/BU-EC500-SP15/haas>
+<git clone https://github.com/BU-EC500-SP15/haas>
 
 This will create the haas directory locally.  Now set up the virtual environment:
 
