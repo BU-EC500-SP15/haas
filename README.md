@@ -142,9 +142,7 @@ You can import this appliance using Virtual Box and boot the VM.
 On boot up, the you can SSH into it using the following information
 
 * IP address: 192.168.56.13
-
 * User: sahil
-
 * Password: sahil123
 
 
@@ -182,16 +180,13 @@ That will switch you into the new Custom OS.
 You can SSH into it using the following information:
 
 * IP-Address: 192.168.56.20
-* 
 * username: sahil
-
 * password: sahil123
 
 
 Also,
 
 * root username: root
-
 * root password: root123
 
 In the home directory of sahil /home/sahil, you will see a folder called “compute” and a symlink to the script to switch back to FPBL from customOS: “loadFPBL.sh”
