@@ -8,6 +8,7 @@ SETTING UP BASE HAAS
 --------------------  
 
 First, clone the repo:
+
 $ `git clone https://github.com/BU-EC500-SP15/haas`
 
 This will create the haas directory locally.  Now set up the virtual environment:
@@ -41,7 +42,8 @@ Add:
 
 $ `haas init_db`
 
-(the following may become deprecated due to the new ENV variable method of choosing endpoints) 
+*(the following may become deprecated due to the new ENV variable method of choosing endpoints)*
+
 You must use different port numbers on base and recursive haas. By default, recursive haas is configured to listen on port 5001, to differentiate it from the base haas code which defaults to port 5000.  To change the port number on the base instance, you must verify that the port number is changed from 5001 to a different port in two different places:
 * the serve function at the bottom of file /haas/moc/rest.py
 * the endpoint in the .cfg file
@@ -50,12 +52,15 @@ You must use different port numbers on base and recursive haas. By default, recu
 cd back to the /haas parent directory
 
 Start the base haas server:
+
 $ `haas serve`
 
 In another terminal window, cd to the same haas directory and enter the virtual environment:
+
 $ `source .venv/bin/activate`
 
 Create the project for recursive HaaS:
+
 $ `haas project_create BaseProject`
 
 BaseProject is the base haas project that will contain all nodes assigned to recursive haas.  You can use any name, just be sure to use the same name in the haas.cfg file for recursive haas (see below).
@@ -80,7 +85,9 @@ $ `pip install -e .`
 
 
 (Again, you should run 
+
 $ `source .venv/bin/activate`
+
 every time you work with recursive haas.)
 
 $ `cp haas.cfg.rhaas-dev-example haas.cfg`
@@ -101,6 +108,7 @@ $ `haas init_db`
 $ `haas serve`
 
 In another terminal, cd to the same haas directory and set the virtual environment:
+
 $ `source .venv/bin/activate`
 
 All recursive calls will be made from the rhass_client directory.  The rhaas_client directory doesn’t have to be inside the haas directory, as long as you activate the virtual environment before changing to the new directory.
@@ -109,7 +117,8 @@ $ `cd rhaas_client`
 
 Copy the haas.cfg file from the recursive haas directory to the the rhaas_client directory, then change the client endpoint to point to port 5001.  If in the above steps you changed recursive haas to listen at a different port, use that port number instead.
 
-[client]
+`[client]`
+
 `endpoint=http://127.0.0.1:5001`
 
 
@@ -136,11 +145,11 @@ You can import this appliance using Virtual Box and boot the VM.
 
 On boot up, the you can SSH into it using the following information
 
-* 'IP address: 192.168.56.13'
+* IP address: 192.168.56.13
 
-* 'User: sahil'
+* User: sahil
 
-* 'Password: sahil123'
+* Password: sahil123
 
 
 In the home directory /home/sahil, you will see a directory called “loadingbay”
@@ -150,7 +159,8 @@ The custom OS is pre-copied into loading bay.
 
 
 Contents of loading bay:
-sahil@ubuntu-basic:~$ 'ls -l loadingbay/'
+
+sahil@ubuntu-basic:~$ `ls -l loadingbay/`
 
 `total 236200`
 
@@ -165,27 +175,28 @@ execute the script loadCustomOS.sh using sudo.
 
 `sudo ./loadCustomOS.sh`
 
-sudo password: sahil123
+* sudo password: sahil123
 
 Once it loads the new kernel successfully,
-you can simply switch to the new custom OS using command.
+you can simply switch to the new custom OS using the following command.
 
 `sudo kexec -e`
 
 That will switch you into the new Custom OS. 
-You can SSH into it using the following information.
-`IP-Address: 192.168.56.20`
+You can SSH into it using the following information:
 
-`username: sahil`
+* IP-Address: 192.168.56.20`
 
-`password: sahil123`
+* username: sahil`
+
+* password: sahil123`
 
 
 Also,
 
-`root username: root`
+* root username: root`
 
-`root password: root123`
+* root password: root123`
 
 In the home directory of sahil /home/sahil, you will see a folder called “compute” and a symlink to the script to switch back to FPBL from customOS: “loadFPBL.sh”
 Change directory into “compute”
@@ -204,7 +215,7 @@ switch user to root
 
 `su`
 
-`password: root123`
+* password: root123`
 
 
 To load back the FPBL kernel, execute the script
