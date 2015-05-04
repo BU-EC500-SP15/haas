@@ -1,4 +1,8 @@
-# This is an example configuration file for HaaS. The ``haas`` command will
+# This is an example configuration file for recursive HaaS. It is largely
+# a copy of the haas.cfg-dev-example file from the main haas, with a few
+# changes
+
+# The ``haas`` command will
 # read its configuration from a file called ``haas.cfg``, in the current
 # working directory. The ``haas.wsgi`` script will look for it at
 # ``/etc/haas.cfg``. This will change in the future; it isn't considered
