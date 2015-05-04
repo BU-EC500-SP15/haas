@@ -28,9 +28,11 @@ $ `source .venv/bin/activate`
 Copy haas.cfg.rhaas-dev-example as haas.cfg.  Make the following amendments:
 
 Uncomment:
+
 `dry_run=True`
 
 Add:
+
 `[recursive]`
 
 `rHaas = False`
@@ -87,12 +89,15 @@ $ `cp haas.cfg.rhaas-dev-example haas.cfg`
 Make the following amendments to the new haas.cfg file:
 
 Uncomment:
+
 `dry_run=True`
 
 Change “BaseProject” to the project name you used when setting up base HaaS.
 
 run:
+
 $ `haas init_db`
+
 $ `haas serve`
 
 In another terminal, cd to the same haas directory and set the virtual environment:
@@ -126,27 +131,35 @@ Download the VM appliance consisting of preconfigured fast provisioning boot loa
 https://drive.google.com/open?id=0B3rQr5rEemfUcnNaTXpqSmpkQ28&authuser=0
 
 You can import this appliance using Virtual Box and boot the VM.
-Make sure to enable vboxnet0 in your virtualbox. 
+
+**Make sure to enable vboxnet0 in your virtualbox.**
 
 On boot up, the you can SSH into it using the following information
 
-IP address: 192.168.56.13
-User: sahil
-Password: sahil123
+* 'IP address: 192.168.56.13'
 
-In the home directory /hom/sahil
-you will see a directory called “loadingbay”
+* 'User: sahil'
+
+* 'Password: sahil123'
+
+
+In the home directory /home/sahil, you will see a directory called “loadingbay”
 
 The custom OS is pre-copied into loading bay.
 
 
 
 Contents of loading bay:
-sahil@ubuntu-basic:~$ ls -l loadingbay/
-total 236200
--rwx------ 1 sahil sahil       473 May  2 20:23 loadCustomOS.sh
--rw-r--r-- 1 sahil sahil 238742291 May  2 20:23 matrixMult_3.16.0-4-amd64.cgz
--rw------- 1 sahil sahil   3113200 May  2 20:23 vmlinuz-3.16.0-4-amd64
+sahil@ubuntu-basic:~$ 'ls -l loadingbay/'
+
+`total 236200`
+
+`-rwx------ 1 sahil sahil       473 May  2 20:23 loadCustomOS.sh`
+
+`-rw-r--r-- 1 sahil sahil 238742291 May  2 20:23 matrixMult_3.16.0-4-amd64.cgz`
+
+`-rw------- 1 sahil sahil   3113200 May  2 20:23 vmlinuz-3.16.0-4-amd64`
+
 
 execute the script loadCustomOS.sh using sudo.
 
@@ -161,32 +174,45 @@ you can simply switch to the new custom OS using command.
 
 That will switch you into the new Custom OS. 
 You can SSH into it using the following information.
-IP-Address: 192.168.56.20
-username: sahil
-password: sahil123
+`IP-Address: 192.168.56.20`
+
+`username: sahil`
+
+`password: sahil123`
+
 
 Also,
-root username: root
-root password: root123
+
+`root username: root`
+
+`root password: root123`
 
 In the home directory of sahil /home/sahil, you will see a folder called “compute” and a symlink to the script to switch back to FPBL from customOS: “loadFPBL.sh”
 Change directory into “compute”
+
 `cd compute`
 
-Run the matrix multiplication application: 
-    `./matrixmult`
+Run the matrix multiplication application:
+
+`./matrixmult`
+    
 It will ask for size of matrices and input matrices.
 It will provide the product of the two matrices.
 
 Once you are done using the application, change back to the home directory /home/sahil
 switch user to root
-su
-password: root123
 
-To load back the FPBL kernel, execute the script 
+`su`
+
+`password: root123`
+
+
+To load back the FPBL kernel, execute the script
+
 `./loadFPBL.sh`
 
 Once it successfully loads the kernel, switch back using
+
 `kexec -e `
 
 That will bring you back into FPBL. 
