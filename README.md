@@ -84,11 +84,7 @@ $ `source .venv/bin/activate`
 $ `pip install -e .`
 
 
-(Again, you should run 
-
-$ `source .venv/bin/activate`
-
-every time you work with recursive haas.)
+(Again, you should run `source .venv/bin/activate` every time you work with recursive haas.)
 
 $ `cp haas.cfg.rhaas-dev-example haas.cfg`
 
@@ -185,18 +181,18 @@ you can simply switch to the new custom OS using the following command.
 That will switch you into the new Custom OS. 
 You can SSH into it using the following information:
 
-* IP-Address: 192.168.56.20`
+* IP-Address: 192.168.56.20
+* 
+* username: sahil
 
-* username: sahil`
-
-* password: sahil123`
+* password: sahil123
 
 
 Also,
 
-* root username: root`
+* root username: root
 
-* root password: root123`
+* root password: root123
 
 In the home directory of sahil /home/sahil, you will see a folder called “compute” and a symlink to the script to switch back to FPBL from customOS: “loadFPBL.sh”
 Change directory into “compute”
@@ -215,7 +211,7 @@ switch user to root
 
 `su`
 
-* password: root123`
+* password: root123
 
 
 To load back the FPBL kernel, execute the script
