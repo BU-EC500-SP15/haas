@@ -97,4 +97,4 @@ vlans = 100-200
 
 [recursive]
 rHaaS = True
-project = BProj
+project = BaseProject
